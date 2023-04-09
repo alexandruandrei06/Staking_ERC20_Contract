@@ -17,10 +17,6 @@ Minimum functionalities:
 
 We have a fixed reward per day. The reward of a user per day is calculated as a percentage of the amount he has staked at the stake pool compared to the total amount of the stake pool.
 
-Bonus functionalities:
-
--   TODO
-
 # ERC20 Token
 
 -   For ERC20 implementation i used the ERC20 contract from [OpenZeppelin](https://docs.openzeppelin.com/contracts/4.x/erc20) using AccessControl with 3 roles: MINTER, BURNER AND DEFAULT_ADMIN_ROLE.
@@ -47,4 +43,15 @@ Bonus functionalities:
 
 ## Staking Contract v2:
 
--   TODO
+-   For this implementation i used a very smart formula for calculating the reward. I found this formula in this [tutorial](https://www.youtube.com/watch?v=iNZWMj4USUM).
+    I recommend watching this tutorial because it explains very clearly how the reward is calculated.
+
+-   Basically, in this version the reward is no longer calculated for each user, it is calculated only for the user who interacts with the contract.
+
+-   In this version, the transaction cannot run out of gas, regardless of the number of users who stake tokens.
+
+-   For the interaction with the ERC20 token, the same model as version v1 remained.
+
+## ERC20 Interaction:
+
+-   Another option to implement this staking contract is to mint all tokens for rewards and transfer them to staking contract address. The staking contract only has to send the rewards to the staker, without having to mint them.

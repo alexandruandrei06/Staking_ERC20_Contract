@@ -6,13 +6,12 @@ import "./LabToken.sol";
 
 
 struct Staker {
-    uint stakerId;
     uint256 stakeAmount;
-    uint lastClaimReward;
+    uint lastRewardPerTokenPaid;
     uint acumulatedReward;
 }
 
-contract StakingContractV1 is AccessControl{
+contract StakingContractV2 is AccessControl{
 
     /* ========== STATE VARIABLES ========== */
     address public tokenContractAddress;
@@ -29,6 +28,12 @@ contract StakingContractV1 is AccessControl{
 
     // Array of stakers addresses
     address[] internal stakersAddresses;
+
+    // Timestamp of the last operation (stake/unstake/restake/ClaimRewards)
+    uint public lastUpdateTime;
+
+    // Reward per token calculated until most recently action
+    uint public rewardPerToken;
 
     /* ========== EVENTS ========== */
     event SetDailyReward(uint256 dailyReward);
@@ -47,61 +52,43 @@ contract StakingContractV1 is AccessControl{
         tokenContract = LabToken(tokenContractAddress);
         dailyReward = _dailyReward;
         poolAmount = 0;
+        lastUpdateTime = block.timestamp;
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
     }
 
     function setDailyReward(uint256 _newDailyReward) external onlyRole(DEFAULT_ADMIN_ROLE){
         require(_newDailyReward > 0, "Daily reward must be grater than 0");
-        addRewards();
         dailyReward = _newDailyReward;
         emit SetDailyReward(dailyReward);
     }
 
-    /*  ========== ITERABLE MAPPING ========== */
-    
-    function add(address _stakerAddress) internal{
-        Staker storage staker =  stakers[_stakerAddress];
-        if(staker.stakerId > 0){
-            //Element already exist
-            return;
-        }else{
-            stakersAddresses.push(_stakerAddress);
-            staker.stakerId = stakersAddresses.length;
-        }
-    }
-    
-    function remove(address _stakerAddress) internal{
-        Staker storage staker =  stakers[_stakerAddress];
-
-        if(staker.stakerId > 0 && staker.stakerId < stakersAddresses.length){
-            stakersAddresses[staker.stakerId] = stakersAddresses[stakersAddresses.length - 1];
-            stakersAddresses.pop();
-        }
-
-        delete stakers[_stakerAddress];
-    }
-
     /*  ========== Staking Functionalities ========== */
 
-    function addRewards() internal{
-        for(uint i = 0; i < stakersAddresses.length; ++i){
-            Staker storage staker =  stakers[stakersAddresses[i]];
-            uint stakingTime = block.timestamp - staker.lastClaimReward;
-            staker.lastClaimReward = block.timestamp;
-            staker.acumulatedReward += (dailyReward * stakingTime * staker.stakeAmount) / (poolAmount * 1 days);
-        }
+    function calculateRewardPerToken() internal{
+        if(poolAmount == 0)
+            return;
+        else
+            rewardPerToken +=   10**18 * dailyReward * (block.timestamp - lastUpdateTime) / (poolAmount * 1 days);
+    }
+
+    function addRewards(address _staker) internal{
+        Staker storage staker = stakers[_staker];
+        staker.acumulatedReward += staker.stakeAmount * (rewardPerToken - staker.lastRewardPerTokenPaid) /  10**18;
     }
 
     function stake(uint _amount) external{
         require(_amount > 0, "Staking amount must be positive.");
         require(_amount <= tokenContract.balanceOf(msg.sender), "You must own the amount you want to stake");
-        addRewards();
+        
+        calculateRewardPerToken();
+        addRewards(msg.sender);
 
         Staker storage staker = stakers[msg.sender];
-        staker.stakeAmount += _amount;
-        staker.lastClaimReward = block.timestamp;
-        add(msg.sender);
+        staker.lastRewardPerTokenPaid = rewardPerToken;
 
+        lastUpdateTime = block.timestamp;
+
+        staker.stakeAmount += _amount;
         poolAmount += _amount;
 
         tokenContract.transferFrom(msg.sender, address(this), _amount);
@@ -114,11 +101,14 @@ contract StakingContractV1 is AccessControl{
         Staker storage staker = stakers[msg.sender];
         require(staker.stakeAmount >= _amount, "User must have staked the amount of tokens");
         
-        addRewards();
+        calculateRewardPerToken();
+        addRewards(msg.sender);
+
+        staker.lastRewardPerTokenPaid = rewardPerToken;
+
+        lastUpdateTime = block.timestamp;
 
         staker.stakeAmount -= _amount;
-        staker.lastClaimReward = block.timestamp;
-
         poolAmount -= _amount;
 
         tokenContract.transfer(msg.sender, _amount);
@@ -128,20 +118,16 @@ contract StakingContractV1 is AccessControl{
     function claimRewards() external{
         Staker storage staker = stakers[msg.sender];
 
-        uint stakingTime = block.timestamp - staker.lastClaimReward;
-        staker.lastClaimReward = block.timestamp;
-        if(poolAmount > 0){
-            staker.acumulatedReward += (dailyReward * stakingTime * staker.stakeAmount) / (poolAmount * 1 days);
-        }
-        
+        calculateRewardPerToken();
+        addRewards(msg.sender);
+        staker.lastRewardPerTokenPaid = rewardPerToken;
+
+        lastUpdateTime = block.timestamp;
 
         require(staker.acumulatedReward > 0, "The rewards amount must be positive");
         uint acumulatedReward = staker.acumulatedReward;
         staker.acumulatedReward = 0;
-        if(staker.stakeAmount == 0){
-            remove(msg.sender);
-        }
-
+        
         tokenContract.mint(msg.sender, acumulatedReward);
 
         emit ClaimRewards(msg.sender, acumulatedReward);
@@ -150,8 +136,12 @@ contract StakingContractV1 is AccessControl{
     function restake() external{
         Staker storage staker = stakers[msg.sender];
 
-        addRewards();
+        calculateRewardPerToken();
+        addRewards(msg.sender);
+        staker.lastRewardPerTokenPaid = rewardPerToken;
 
+        lastUpdateTime = block.timestamp;
+        
         require(staker.acumulatedReward > 0, "The rewards amount for restake must be positive");
         uint acumulatedReward = staker.acumulatedReward;
         staker.acumulatedReward = 0;
