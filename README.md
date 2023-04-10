@@ -4,7 +4,7 @@
 
 # Description
 
-This project is for Softbinator Labs.
+This project is for [Softbinator Labs](https://softbinator.com/softbinator-labs/).
 
 The purpose of the project is to implement a smart contract for staking ERC20 token.
 
