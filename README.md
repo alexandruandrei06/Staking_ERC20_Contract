@@ -52,6 +52,13 @@ We have a fixed reward per day. The reward of a user per day is calculated as a 
 
 -   For the interaction with the ERC20 token, the same model as version v1 remained.
 
+-   Algorithm for calculating reward: for every interaction with the contract (stake/unstake/stake/claimReward) there is 5 steps that need to be done :
+    -   Calculate reward per token first, before changing state of the contract(poolAmount, staker.stakeAmount).
+    -   Calculate reward earned by the user who interacted with the contract, from the last interaction to the current time.
+    -   Update last user reward per token paid with the new one (staker.lastRewardPerTokenPaid = rewardPerToken).
+    -   Update the lastUpdateTime with current timestamp
+    -   Update state of the contract (poolAmount, staker.stakeAmount)
+
 ## ERC20 Interaction:
 
 -   Another option to implement this staking contract is to mint all tokens for rewards and transfer them to staking contract address. The staking contract only has to send the rewards to the staker, without having to mint them.
